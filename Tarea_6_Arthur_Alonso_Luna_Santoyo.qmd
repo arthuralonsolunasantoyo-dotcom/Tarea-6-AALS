@@ -1,0 +1,1507 @@
+---
+title: "Tarea 6: Resolución numérica de ecuaciones diferenciales ordinarias"
+author: "Arthur Alonso Luna Santoyo"
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: false
+    grid:
+      body-width: 1250px
+execute:
+  warning: false
+  message: false
+editor: visual
+jupyter: python3
+---
+
+Antes de iniciar se cargan las librerías necesarias. La tarea se trabaja como un cuaderno de Quarto con Python, resolviendo las EDO con `solve_ivp` y graficando las soluciones para interpretar el comportamiento dinámico de cada problema.
+
+```{python}
+#| label: configuracion-general
+#| code-fold: true
+
+import numpy as np
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from scipy import integrate
+
+# Ajustes visuales generales para que las gráficas tengan una apariencia uniforme
+# y distinta a una salida básica de matplotlib.
+plt.rcParams.update({
+    "figure.figsize": (8.8, 5.2),
+    "axes.grid": True,
+    "grid.alpha": 0.28,
+    "grid.linestyle": ":",
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "lines.linewidth": 2.3,
+    "axes.titleweight": "bold",
+    "font.size": 10
+})
+
+colores_reporte = [
+    "#3A0CA3", "#F72585", "#4CC9F0", "#FB8500",
+    "#2D6A4F", "#9D4EDD", "#006D77", "#D00000"
+]
+```
+
+# Guía de trabajo
+
+En esta tarea se resuelven problemas de ecuaciones diferenciales ordinarias mediante transformación a sistemas de primer orden y aproximación numérica. La herramienta principal es `integrate.solve_ivp`, que permite calcular soluciones aproximadas en una malla de tiempo y después representarlas gráficamente. En los modelos de dos variables también se incluye el plano fase, porque ayuda a ver la relación entre las componentes del sistema.
+
+# Bloque 01. Ley de enfriamiento de Newton
+La Ley de Enfriamiento de Newton establece que la tasa de enfriamiento de un objeto es proporcional a la diferencia de temperatura entre el objeto y su entorno. Supongamos que $t$ es el tiempo, $T$ es la temperatura del objeto, y $T_s$ es la temperatura del entorno. La siguiente ecuación diferencial describe la Ley de Newton:
+\begin{equation}
+\frac{dT}{dt} = k(T - T_s),
+\end{equation}
+
+donde $k$ es una constante.
+
+Consideramos una taza de café a 95 °C en una habitación de 18 °C. Se sabe que el café se enfría a una razón de 2 °C/min cuando su temperatura es de 70 °C. Calcula el valor de la constante $k$ y se construye una gráfica de la solución de la ecuación diferencial.
+
+El dato "se enfría a una razón de 2 °C/min cuando $T=70$" significa que $\dfrac{dT}{dt}=-2$ cuando $T=70$ (el signo negativo indica que la temperatura disminuye). Sustituyendo en la ecuación con $T_s=18$:
+
+\begin{equation}
+-2 = k\,(70-18) = 52\,k \quad\Longrightarrow\quad k = -\frac{2}{52} = -\frac{1}{26}\approx -0.03846.
+\end{equation}
+
+La solución analítica de la ecuación es $T(t)=T_s+(T_0-T_s)e^{kt}=18+77\,e^{kt}$. Después se obtiene $k$ y se aproxima la solución numéricamente con `solve_ivp`, comparándola con la solución exacta.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Parámetros iniciales
+temp_inicial = 95      # Temperatura inicial del café
+temp_entorno = 18      # Temperatura del entorno
+# Cuando T = 70, dT/dt = -2  =>  -2 = k*(70 - 18)
+k = -2 / (70 - temp_entorno)
+print(f"El valor de la constante es k = {k:.5f} (1/min)")
+
+# Ecuación diferencial dT/dt = k(T - temp_entorno)
+def f(t, T, k, temp_entorno):
+    return k * (T - temp_entorno)
+
+inicio_t = 0
+final_t = 60
+malla_t = np.linspace(inicio_t, final_t, 200)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], [temp_inicial], t_eval=malla_t, args=(k, temp_entorno))
+
+# Solución analítica para comparar
+temperatura_analitica = temp_entorno + (temp_inicial - temp_entorno) * np.exp(k * malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label='Solución numérica T(t)')
+plt.plot(malla_t, temperatura_analitica, '--', color=colores_reporte[1], label='Solución analítica')
+plt.axhline(temp_entorno, color='#6C757D', lw=1, ls=':', label='Temperatura ambiente $T_s$')
+plt.xlabel('t (min)')
+plt.ylabel('T (°C)')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 02. Problema con valor inicial lineal
+Obtén una aproximación de la solución del siguiente problema con valor inicial.
+\begin{equation}
+y' = t -ty, \qquad y(1)=0.
+\end{equation}
+
+Se trata de una ecuación lineal $y'+ty=t$, cuya solución exacta es $y(t)=1-e^{(1-t^2)/2}$. Enseguida se presenta la aproximación numérica y su comparación con la solución exacta.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, y):
+    return t - t * y
+
+inicio_t = 1
+final_t = 5
+estado_0 = [0]
+malla_t = np.linspace(inicio_t, final_t, 200)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], estado_0, t_eval=malla_t)
+
+# Solución analítica
+curva_analitica = 1 - np.exp((1 - malla_t**2) / 2)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label='Solución numérica y(t)')
+plt.plot(malla_t, curva_analitica, '--', color=colores_reporte[1], label='Solución analítica')
+plt.xlabel('t')
+plt.ylabel('y(t)')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 03. EDO de segundo orden convertida a sistema
+Para la siguiente ecuación diferencial ordinaria de segundo orden con valores iniciales
+\begin{equation}
+u''-3u'-1.5 u= 8\,sen(3t), \qquad u(1)=-0.5, u'(1)=1
+\end{equation}
+
+Escribe el respectivo sistema de ecuaciones diferenciales de primer orden considerando que $v=u'(t)$ (velocidad) y posteriormente brinda la solución del sistema por medio de las funciones $u(t)$ y $v(t)$
+
+
+Esta ecuación diferencial ordinaria de segundo orden se puede reescribir como el siguiente sistema de primer orden:
+\begin{eqnarray}
+u' & = & v \\
+v' &=& 3v + 1.5u + 8\sin(3t)
+\end{eqnarray}
+
+con los valores iniciales $u(1)=-0.5$ y $v(1)=1$.
+
+Enseguida se presenta la aproximación de la solución del sistema de ecuaciones diferenciales ordinarias de primer orden y las gráficas de las funciones $u(t)$ y $v(t)$. Notar que $v(t)$ es la derivada de $u(t)$ y esta última es la función que resuelve la ecuación diferencial ordinaria de segundo orden dada en el enunciado.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Función que define el sistema de ecuaciones diferenciales ordinarias de primer orden
+def f(t, U):
+  u, v = U
+  return[v, 8*np.sin(3*t)+3*v+1.5*u]
+
+# Dominio temporal y estado inicial
+inicio_t = 1
+final_t = 3
+s0 = [-0.5, 1]
+malla_t = np.linspace(inicio_t, final_t, 200)
+
+# Aproximación de la solución del sistema de ecuaciones diferenciales ordinarias de primer orden
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, nodos_t = malla_t)
+
+# Gráfica de las funciones u(t) y v(t), notar que v(t) es la derivada de u(t) y esta última es la función que resuelve la ecuación diferencial ordinaria de segundo orden dada en el enunciado
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], label = 'u(t)')
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label = 'v(t)')
+plt.xlabel('t')
+plt.ylabel('u/v')
+#plt.axhline(0, color='#023047', lw=1, ls='--')
+#plt.axvline(0, color='#023047', lw=1, ls='--')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+---
+
+<br>
+
+Para cada una de las ecuaciones diferenciales ordinarias de segundo y tercer orden con valores iniciales de los ejercicios 4 al 18, encuentra el respectivo sistema de primer orden y aproxima la solución, brinda gráficas de cada una de las funciones que resulten del sistema.
+
+# Bloque 04. Oscilador armónico simple
+**Oscilador armónico simple**
+
+\begin{equation}
+y'' + 4y = 0,\quad y(0) = 1,\ y'(0) = 0
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$, el sistema de primer orden es
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & -4\,y_1
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, -4 * y1]
+
+inicio_t, final_t = 0, 10
+s0 = [1, 0]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 05. Oscilador con amortiguamiento
+**Oscilador amortiguado**
+
+\begin{equation}
+y'' + 0.5y' + 4y = 0,\quad y(0) = 2,\ y'(0) = 0
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & -0.5\,y_2 - 4\,y_1
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, -0.5 * y2 - 4 * y1]
+
+inicio_t, final_t = 0, 20
+s0 = [2, 0]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 06. Oscilador forzado
+**Oscilador forzado**
+
+\begin{equation}
+y'' + 2y' + y = \cos(t),\quad y(0) = 0,\ y'(0) = 1
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & \cos(t) - 2\,y_2 - y_1
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, np.cos(t) - 2 * y2 - y1]
+
+inicio_t, final_t = 0, 20
+s0 = [0, 1]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 07. Ecuación no lineal de segundo orden
+**Ecuación no lineal de segundo orden**
+
+\begin{equation}
+y'' = -y^3 + \cos(t),\quad y(0) = 0,\ y'(0) = 0
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & -y_1^3 + \cos(t)
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, -y1**3 + np.cos(t)]
+
+inicio_t, final_t = 0, 20
+s0 = [0, 0]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 08. Modelo con amortiguamiento cuadrático
+**Amortiguamiento cuadrático**
+
+\begin{equation}
+y'' + y'^2 + y = 0,\quad y(0) = 1,\ y'(0) = -1
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & -y_2^2 - y_1
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, -y2**2 - y1]
+
+inicio_t, final_t = 0, 20
+s0 = [1, -1]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 09. Péndulo simple no lineal
+**Péndulo simple (no lineal)**
+
+\begin{equation}
+\theta'' + \sin(\theta) = 0,\quad \theta(0) = \frac{\pi}{4},\ \theta'(0) = 0
+\end{equation}
+
+Con $\theta_1=\theta$ y $\theta_2=\theta'$:
+\begin{eqnarray}
+\theta_1' & = & \theta_2 \\
+\theta_2' & = & -\sin(\theta_1)
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    th1, th2 = Y
+    return [th2, -np.sin(th1)]
+
+inicio_t, final_t = 0, 20
+s0 = [np.pi / 4, 0]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label=r"$\theta(t)$")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label=r"$\theta'(t)$")
+plt.xlabel('t')
+plt.ylabel(r"$\theta$ / $\theta'$")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 10. Circuito RLC
+**Circuito RLC**
+
+\begin{equation}
+LQ'' + RQ' + \frac{1}{C}Q = V(t),\quad Q(0) = 0,\ Q'(0) = 0,\quad V(t) = \sin(t)
+\end{equation}
+
+Considera $L = 0.5$, $R = 2$ y $C = 5$ para este ejercicio.
+
+Considerando la derivada de la carga $Q$ como la corriente $I$, es decir, $I = Q'$, podemos reescribir la ecuación diferencial de segundo orden como el siguiente sistema de primer orden:
+\begin{eqnarray}
+Q' & = & I \\
+I' &=& \frac{1}{L}\left(\sin(t) - RI - \frac{1}{C}Q\right)
+\end{eqnarray}
+
+con las condiciones iniciales $Q(0) = 0$ y $I(0) = 0$. Enseguida se presenta la aproximación de la solución del sistema de ecuaciones diferenciales ordinarias de primer orden y las gráficas de las funciones $Q(t)$ y $I(t)$. Notar que $I(t)$ es la derivada de $Q(t)$ y esta última es la función que resuelve la ecuación diferencial ordinaria de segundo orden dada en el enunciado.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Q, L, R, C):
+  q, i = Q
+  return[i, (1/L)*(np.sin(t)-R*i-q/C)]
+
+L =0.5
+R = 2
+C= 5
+
+inicio_t = 0
+final_t = 20
+s0 = [0, 0]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, nodos_t = malla_t, args = (L, R, C))
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], label = 'Q(t)')
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label = 'I(t)')
+plt.xlabel('t')
+plt.ylabel('Q/I')
+#plt.axhline(0, color='#023047', lw=1, ls='--')
+#plt.axvline(0, color='#023047', lw=1, ls='--')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+
+```
+
+
+# Bloque 11. Ecuación tipo Bessel
+**Ecuación de Bessel aproximada**
+
+\begin{equation}
+x^2y'' + xy' + (x^2 - 1)y = 0,\quad y(1) = 0.5,\ y'(1) = -0.1
+\end{equation}
+
+Despejando $y''$ (con $x>0$, la variable independiente es $x$):
+\begin{equation}
+y'' = -\frac{1}{x}\,y' - \left(1-\frac{1}{x^2}\right)y.
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & -\frac{1}{x}\,y_2 - \left(1-\frac{1}{x^2}\right)y_1
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(x, Y):
+    y1, y2 = Y
+    return [y2, -(1/x) * y2 - (1 - 1/x**2) * y1]
+
+x0, xf = 1, 15
+s0 = [0.5, -0.1]
+x_values = np.linspace(x0, xf, 800)
+
+solucion_ivp = integrate.solve_ivp(f, [x0, xf], s0, t_eval=x_values)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(x)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(x)")
+plt.xlabel('x')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 12. EDO no lineal con exponencial
+**No lineal con exponencial**
+
+\begin{equation}
+y'' + y e^y = \sin(t),\quad y(0) = 0,\ y'(0) = 1
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & \sin(t) - y_1 e^{y_1}
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, np.sin(t) - y1 * np.exp(y1)]
+
+inicio_t, final_t = 0, 20
+s0 = [0, 1]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 13. Cuerda con fuerza externa
+**Cuerda con fuerza externa**
+
+\begin{equation}
+y'' = -\pi^2 y + \cos(2\pi t),\quad y(0) = 1,\ y'(0) = 0
+\end{equation}
+
+Con $y_1=y$ y $y_2=y'$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & -\pi^2 y_1 + \cos(2\pi t)
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [y2, -np.pi**2 * y1 + np.cos(2 * np.pi * t)]
+
+inicio_t, final_t = 0, 10
+s0 = [1, 0]
+malla_t = np.linspace(inicio_t, final_t, 800)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.xlabel('t')
+plt.ylabel("y / y'")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 14. EDO homogénea de tercer orden
+**EDO homogénea de tercer orden**
+
+\begin{equation}
+y''' - 3y'' + 3y' - y = 0,\quad y(0) = 1,\ y'(0) = 0,\ y''(0) = 1
+\end{equation}
+
+Con $y_1=y$, $y_2=y'$ y $y_3=y''$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & y_3 \\
+y_3' & = & 3\,y_3 - 3\,y_2 + y_1
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2, y3 = Y
+    return [y2, y3, 3*y3 - 3*y2 + y1]
+
+inicio_t, final_t = 0, 5
+s0 = [1, 0, 1]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[2], label="y''(t)")
+plt.xlabel('t')
+plt.ylabel("y / y' / y''")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 15. Tercer orden con término no lineal
+**EDO de tercer orden con término no lineal**
+
+\begin{equation}
+y''' + y^2 = 0,\quad y(0) = 1,\ y'(0) = 0,\ y''(0) = 0
+\end{equation}
+
+Con $y_1=y$, $y_2=y'$ y $y_3=y''$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & y_3 \\
+y_3' & = & -y_1^2
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2, y3 = Y
+    return [y2, y3, -y1**2]
+
+inicio_t, final_t = 0, 5
+s0 = [1, 0, 0]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[2], label="y''(t)")
+plt.xlabel('t')
+plt.ylabel("y / y' / y''")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 16. Oscilador cúbico forzado
+**Oscilador cúbico forzado**
+
+\begin{equation}
+y''' + y'' + y^3 = \cos(t),\quad y(0) = 0,\ y'(0) = 1,\ y''(0) = 0
+\end{equation}
+
+Con $y_1=y$, $y_2=y'$ y $y_3=y''$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & y_3 \\
+y_3' & = & \cos(t) - y_3 - y_1^3
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2, y3 = Y
+    return [y2, y3, np.cos(t) - y3 - y1**3]
+
+inicio_t, final_t = 0, 20
+s0 = [0, 1, 0]
+malla_t = np.linspace(inicio_t, final_t, 800)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[2], label="y''(t)")
+plt.xlabel('t')
+plt.ylabel("y / y' / y''")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 17. Modelo tipo KdV simplificado
+**Ecuación tipo dispersión (Korteweg-de Vries simplificada)**
+
+\begin{equation}
+y''' - 6yy' = 0,\quad y(0) = 2,\ y'(0) = 0,\ y''(0) = -1
+\end{equation}
+
+Con $y_1=y$, $y_2=y'$ y $y_3=y''$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & y_3 \\
+y_3' & = & 6\,y_1 y_2
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2, y3 = Y
+    return [y2, y3, 6 * y1 * y2]
+
+inicio_t, final_t = 0, 3
+s0 = [2, 0, -1]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[2], label="y''(t)")
+plt.xlabel('t')
+plt.ylabel("y / y' / y''")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 18. Modelo no lineal de conducción
+**Modelo no lineal de conducción**
+
+\begin{equation}
+y''' = -y y'' + y',\quad y(0) = 1,\ y'(0) = 0,\ y''(0) = -1
+\end{equation}
+
+Con $y_1=y$, $y_2=y'$ y $y_3=y''$:
+\begin{eqnarray}
+y_1' & = & y_2 \\
+y_2' & = & y_3 \\
+y_3' & = & -y_1 y_3 + y_2
+\end{eqnarray}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2, y3 = Y
+    return [y2, y3, -y1 * y3 + y2]
+
+inicio_t, final_t = 0, 5
+s0 = [1, 0, -1]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="y(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y'(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[2], label="y''(t)")
+plt.xlabel('t')
+plt.ylabel("y / y' / y''")
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 19. Saldo bancario con depósitos y retiros
+Una persona abre una cuenta bancaria con un saldo inicial de $2000$ dólares. Sea $b(t)$ el saldo en la cuenta en el tiempo t. Así, $b(0) = 2000$. El banco paga intereses a una tasa continua del $5\%$ anual. La persona realiza depósitos en la cuenta a una tasa continua de $s(t)$ dólares por año. Supogamos que $s(0) = 500$ y que $s(t)$ está aumentando a una tasa continua del $4\%$ anual (la persona puede ahorrar más conforme aumenta su ingreso con el tiempo). Brinda el sistema de ecuaciones diferenciales ordinarias y gráfica la solución $b(t)$ y $s(t)$.
+
+El saldo crece por los intereses ($5\%$ continuo) más los depósitos $s(t)$, y la tasa de depósito crece al $4\%$ continuo. El sistema es:
+\begin{eqnarray}
+b'(t) & = & 0.05\,b(t) + s(t) \\
+s'(t) & = & 0.04\,s(t)
+\end{eqnarray}
+
+con $b(0)=2000$ y $s(0)=500$.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    b, s = Y
+    return [0.05 * b + s, 0.04 * s]
+
+inicio_t, final_t = 0, 20
+s0 = [2000, 500]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="b(t) — saldo")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="s(t) — tasa de depósito")
+plt.xlabel('t (años)')
+plt.ylabel('dólares')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 20. Sistema lineal de dos ecuaciones
+Calcula numéricamente la solución del siguiente sistema de ecuaciones diferenciales ordinarias
+
+\begin{eqnarray}
+x'(t) & = -6 x - 3 y\\
+y'(t) & = -15 x + 6y
+\end{eqnarray}
+
+donde $x(0)= 3$ y $y(0)=2$. Representa por separado las funciones y el recorrido en el plano fase.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [-6*x - 3*y, -15*x + 6*y]
+
+inicio_t, final_t = 0, 2
+s0 = [3, 2]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución x(t) y y(t)
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase en el plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 21. Interacción de dos especies
+Considera la interacción de dos especies de animales en un hábitat. Considerando que las poblaciones $x(t)$ y $y(t)$ pueden ser modeladas por medio de las ecuaciones
+
+\begin{eqnarray}
+x'(t) & = 1.4 x - y\\
+y'(t) & = -1.25 x + 3.4y
+\end{eqnarray}
+
+donde $x(0)=7$ y $y(0)=3$. Representa por separado las funciones que brindan la población de cada especie al tiempo $t$.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [1.4*x - y, -1.25*x + 3.4*y]
+
+inicio_t, final_t = 0, 5
+s0 = [7, 3]
+malla_t = np.linspace(inicio_t, final_t, 500)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t) — especie 1")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t) — especie 2")
+plt.xlabel('t')
+plt.ylabel('población')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 22. Sistema lineal con términos constantes
+Calcula numéricamente la solución del siguiente sistema de ecuaciones diferenciales ordinarias,
+
+\begin{eqnarray}
+y'_1(t) & = -6.2 +1.1 y_1 - 0.8 y_2\\
+y'_2(t) & = -13.8 +2.1 y_1 -1.2 y_2
+\end{eqnarray}
+
+con los valores iniciales $y_1(0)=11$, $y_2(0)=4$. Representa por separado las funciones y el recorrido en el plano fase.
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, Y):
+    y1, y2 = Y
+    return [-6.2 + 1.1*y1 - 0.8*y2, -13.8 + 2.1*y1 - 1.2*y2]
+
+inicio_t, final_t = 0, 30
+s0 = [11, 4]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución y1(t) y y2(t)
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label=r"$y_1(t)$")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label=r"$y_2(t)$")
+plt.xlabel('t')
+plt.ylabel(r'$y_1$ / $y_2$')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel(r'$y_1$')
+plt.ylabel(r'$y_2$')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+<br>
+
+Para cada uno de los sistemas de ecuaciones diferenciales ordinarias no lineales con valor inicial grafica las funciones y las respectivas trayectorias.
+
+# Bloque 23. Sistema logístico con depredación
+**Sistema logístico con depredación**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = x(1 - x) - xy \\
+\frac{dy}{dt} = -y + xy \\
+x(0) = 0.9,\quad y(0) = 0.1
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [x*(1 - x) - x*y, -y + x*y]
+
+inicio_t, final_t = 0, 30
+s0 = [0.9, 0.1]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 24. Oscilador de Van der Pol
+**Oscilador de Van der Pol**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = y \\
+\frac{dy}{dt} = \mu (1 - x^2)y - x \\
+x(0) = 2,\quad y(0) = 0,\quad \mu = 3
+\end{cases}
+\end{equation}
+
+Enseguida se presenta la aproximación de la solución del sistema de ecuaciones diferenciales ordinarias de primer orden y las gráficas de las funciones $x(t)$ y $y(t)$. 
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X, mu):
+  x, y = X
+  return[y, mu*(1-x**2)*y-x]
+
+
+mu = 3
+inicio_t = 0
+final_t = 20
+s0 = [2, 0]
+malla_t = np.linspace(inicio_t, final_t, 5000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, nodos_t = malla_t, args = (mu,))
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], label = 'x(t)')
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label = 'y(t)')
+plt.xlabel('t')
+plt.ylabel('x/y')
+#plt.axhline(0, color='#023047', lw=1, ls='--')
+#plt.axvline(0, color='#023047', lw=1, ls='--')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+
+```
+
+
+En este caso es posible observar que el sistema de ecuaciones diferenciales ordinarias de primer orden tiene un comportamiento oscilatorio, es decir, las funciones $x(t)$ y $y(t)$ oscilan con el tiempo. Este tipo de comportamiento es característico del oscilador de Van der Pol, donde la no linealidad introducida por el término $\mu (1 - x^2)y$ genera una dinámica compleja que puede incluir oscilaciones limitadas o incluso caos dependiendo del valor de $\mu$. Para observar cómo varía el comportamiento del sistema con diferentes valores de $\mu$, se pueden graficar las trayectorias para varios valores de $\mu$ y comparar los resultados. Estas trayectorias se denominan órbitas del oscilador, y pueden mostrar cómo el sistema evoluciona en el espacio de fases para diferentes condiciones iniciales y parámetros. Enseguida se presenta la gráfica de las órbitas del oscilador de Van der Pol para varios valores de $\mu$.
+
+**Órbitas del oscilador**
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+mu_s = [3, 5, 10, 15, 20]
+
+plt.figure(figsize=(8.8, 5.2))
+for mu in mu_s:
+  solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, nodos_t = malla_t, args = (mu,))
+  plt.plot(solucion_ivp.y[0], solucion_ivp.y[1], label = 'mu = ' + str(mu))
+plt.xlabel('x')
+plt.ylabel('y')
+#plt.axhline(0, color='#023047', lw=1, ls='--')
+#plt.axvline(0, color='#023047', lw=1, ls='--')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+
+```
+
+
+# Bloque 25. Sistema Lotka-Volterra
+**Sistema de Lotka-Volterra**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = \alpha x - \beta xy \\
+\frac{dy}{dt} = \delta xy - \gamma y \\
+x(0) = 10,\quad y(0) = 5,\quad \alpha = 1.5,\ \beta = 1,\ \delta = 1,\ \gamma = 3
+\end{cases}
+\end{equation}  
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X, alpha, beta, delta, gamma):
+    x, y = X
+    return [alpha*x - beta*x*y, delta*x*y - gamma*y]
+
+alpha, beta, delta, gamma = 1.5, 1, 1, 3
+inicio_t, final_t = 0, 20
+s0 = [10, 5]
+malla_t = np.linspace(inicio_t, final_t, 2000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t,
+                              args=(alpha, beta, delta, gamma))
+
+# Componentes de la solución (poblaciones)
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t) — presa")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t) — depredador")
+plt.xlabel('t')
+plt.ylabel('población')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x (presa)')
+plt.ylabel('y (depredador)')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 26. Interacción seno-coseno
+**Interacción no lineal seno-coseno**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = \sin(y) - x^3 \\
+\frac{dy}{dt} = \cos(x) - y^2 \\
+x(0) = 1,\quad y(0) = 0
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [np.sin(y) - x**3, np.cos(x) - y**2]
+
+inicio_t, final_t = 0, 20
+s0 = [1, 0]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 27. Modelo neuronal FitzHugh-Nagumo
+**FitzHugh-Nagumo (modelo de neurona)**
+
+\begin{equation}
+\begin{cases}
+\frac{dv}{dt} = v - \frac{v^3}{3} - w + I \\
+\frac{dw}{dt} = 0.08(v + 0.7 - 0.8w) \\
+v(0) = -1,\quad w(0) = 1,\quad I = 0.5
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X, I):
+    v, w = X
+    return [v - v**3/3 - w + I, 0.08*(v + 0.7 - 0.8*w)]
+
+I = 0.5
+inicio_t, final_t = 0, 100
+s0 = [-1, 1]
+malla_t = np.linspace(inicio_t, final_t, 2000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t, args=(I,))
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="v(t) — potencial")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="w(t) — recuperación")
+plt.xlabel('t')
+plt.ylabel('v / w')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase (plano fase)
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('v')
+plt.ylabel('w')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 28. Sistema no autónomo
+**Sistema no autónomo**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = x \sin(t) + y^2 \\
+\frac{dy}{dt} = -y \cos(t) + x \\
+x(0) = 1,\quad y(0) = -1
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [x*np.sin(t) + y**2, -y*np.cos(t) + x]
+
+inicio_t, final_t = 0, 5
+s0 = [1, -1]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 29. Modelo epidemiológico SIR
+**Modelo epidemiológico SIR (en este caso no graficar el recorrido en el plano fase)**
+
+\begin{equation}
+\begin{cases}
+\frac{dS}{dt} = -\beta S I \\
+\frac{dI}{dt} = \beta S I - \gamma I \\
+\frac{dR}{dt} = \gamma I \\
+S(0) = 0.99,\quad I(0) = 0.01,\quad R(0) = 0,\quad \beta = 0.5,\ \gamma = 0.1
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X, beta, gamma):
+    S, I, R = X
+    return [-beta*S*I, beta*S*I - gamma*I, gamma*I]
+
+beta, gamma = 0.5, 0.1
+inicio_t, final_t = 0, 100
+s0 = [0.99, 0.01, 0]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t, args=(beta, gamma))
+
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="S(t) — susceptibles")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="I(t) — infectados")
+plt.plot(solucion_ivp.t, solucion_ivp.y[2], label="R(t) — recuperados")
+plt.xlabel('t')
+plt.ylabel('proporción de la población')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 30. Crecimiento logístico cruzado
+**Crecimiento logístico cruzado**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = x(1 - x - 0.5y) \\
+\frac{dy}{dt} = y(1 - y - 0.3x) \\
+x(0) = 0.5,\quad y(0) = 0.2
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [x*(1 - x - 0.5*y), y*(1 - y - 0.3*x)]
+
+inicio_t, final_t = 0, 30
+s0 = [0.5, 0.2]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 31. Movimiento en campo no lineal
+**Movimiento en campo no lineal**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = y \\
+\frac{dy}{dt} = -\sin(x) - 0.5 y \\
+x(0) = \pi/2,\quad y(0) = 0
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [y, -np.sin(x) - 0.5*y]
+
+inicio_t, final_t = 0, 20
+s0 = [np.pi/2, 0]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+
+# Bloque 32. Sistema no lineal acoplado
+**Sistema no lineal acoplado**
+
+\begin{equation}
+\begin{cases}
+\frac{dx}{dt} = x(1 - x) - xy^2 \\
+\frac{dy}{dt} = y(1 - y) - x^2y \\
+x(0) = 0.8,\quad y(0) = 0.6
+\end{cases}
+\end{equation}
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+def f(t, X):
+    x, y = X
+    return [x*(1 - x) - x*y**2, y*(1 - y) - x**2*y]
+
+inicio_t, final_t = 0, 30
+s0 = [0.8, 0.6]
+malla_t = np.linspace(inicio_t, final_t, 1000)
+
+solucion_ivp = integrate.solve_ivp(f, [inicio_t, final_t], s0, t_eval=malla_t)
+
+# Componentes de la solución
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.t, solucion_ivp.y[0], color=colores_reporte[0], marker='o', markevery=18, label="x(t)")
+plt.plot(solucion_ivp.t, solucion_ivp.y[1], label="y(t)")
+plt.xlabel('t')
+plt.ylabel('x / y')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
+
+```{python}
+#| code-fold: true
+#| fig-align: "center"
+
+# Plano fase
+plt.figure(figsize=(8.8, 5.2))
+plt.plot(solucion_ivp.y[0], solucion_ivp.y[1])
+plt.plot(s0[0], s0[1], 'o', label='Condición inicial')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Plano fase')
+plt.legend()
+plt.grid(alpha=0.28, linestyle=':')
+plt.show()
+```
